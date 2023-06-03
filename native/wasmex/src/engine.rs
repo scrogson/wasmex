@@ -32,7 +32,7 @@ pub fn new(config: ExEngineConfig) -> Result<ResourceArc<EngineResource>, rustle
     Ok(resource)
 }
 
-#[rustler::nif(name = "engine_precompile_module")]
+#[rustler::nif(name = "engine_precompile_module", schedule = "DirtyCpu")]
 pub fn precompile_module<'a>(
     env: rustler::Env<'a>,
     engine_resource: ResourceArc<EngineResource>,
@@ -68,6 +68,7 @@ pub(crate) fn engine_config(engine_config: ExEngineConfig) -> Config {
     config.consume_fuel(engine_config.consume_fuel);
     config.wasm_backtrace_details(backtrace_details);
     config.cranelift_opt_level(cranelift_opt_level);
+    config.async_support(true);
     config
 }
 

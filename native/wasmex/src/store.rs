@@ -1,14 +1,8 @@
-// Due to a clippy bug it thinks we needlessly borrow stuff
-// when defining the ExStoreLimits struct
-// see: https://github.com/rust-lang/rust-clippy/issues/9778
-#![allow(clippy::needless_borrow)]
-
 use rustler::{resource::ResourceArc, Error};
 use std::{collections::HashMap, sync::Mutex};
 use wasi_common::WasiCtx;
 use wasmtime::{
-    AsContext, AsContextMut, Engine, Store, StoreContext, StoreContextMut, StoreLimits,
-    StoreLimitsBuilder,
+    AsContext, AsContextMut, Engine, Store, StoreContext, StoreContextMut
 };
 use wasmtime_wasi::WasiCtxBuilder;
 
@@ -16,6 +10,7 @@ use crate::{
     caller::{get_caller, get_caller_mut},
     engine::{unwrap_engine, EngineResource},
     pipe::{Pipe, PipeResource},
+    store_limits::{ExStoreLimits, StoreLimitsAsync}
 };
 
 #[derive(Debug, NifStruct)]
@@ -42,57 +37,9 @@ pub struct ExWasiOptions {
     preopen: Vec<ExWasiPreopenOptions>,
 }
 
-#[derive(NifStruct)]
-#[module = "Wasmex.StoreLimits"]
-pub struct ExStoreLimits {
-    memory_size: Option<usize>,
-    table_elements: Option<u32>,
-    instances: Option<usize>,
-    tables: Option<usize>,
-    memories: Option<usize>,
-}
-
-impl ExStoreLimits {
-    pub fn to_wasmtime(&self) -> StoreLimits {
-        let limits = StoreLimitsBuilder::new();
-
-        let limits = if let Some(memory_size) = self.memory_size {
-            limits.memory_size(memory_size)
-        } else {
-            limits
-        };
-
-        let limits = if let Some(table_elements) = self.table_elements {
-            limits.table_elements(table_elements)
-        } else {
-            limits
-        };
-
-        let limits = if let Some(instances) = self.instances {
-            limits.instances(instances)
-        } else {
-            limits
-        };
-
-        let limits = if let Some(tables) = self.tables {
-            limits.tables(tables)
-        } else {
-            limits
-        };
-
-        let limits = if let Some(memories) = self.memories {
-            limits.memories(memories)
-        } else {
-            limits
-        };
-
-        limits.build()
-    }
-}
-
 pub struct StoreData {
     pub(crate) wasi: Option<WasiCtx>,
-    pub(crate) limits: StoreLimits,
+    pub(crate) limits: StoreLimitsAsync,
 }
 
 pub enum StoreOrCaller {
@@ -149,10 +96,10 @@ pub fn new(
     let limits = if let Some(limits) = limits {
         limits.to_wasmtime()
     } else {
-        StoreLimits::default()
+        StoreLimitsAsync::default()
     };
     let mut store = Store::new(&engine, StoreData { wasi: None, limits });
-    store.limiter(|state| &mut state.limits);
+    store.limiter_async(|state| &mut state.limits);
     let resource = ResourceArc::new(StoreOrCallerResource {
         inner: Mutex::new(StoreOrCaller::Store(store)),
     });
@@ -191,7 +138,7 @@ pub fn new_wasi(
     let limits = if let Some(limits) = limits {
         limits.to_wasmtime()
     } else {
-        StoreLimits::default()
+        StoreLimitsAsync::default()
     };
     let mut store = Store::new(
         &engine,
@@ -200,7 +147,7 @@ pub fn new_wasi(
             limits,
         },
     );
-    store.limiter(|state| &mut state.limits);
+    store.limiter_async(|state| &mut state.limits);
     let resource = ResourceArc::new(StoreOrCallerResource {
         inner: Mutex::new(StoreOrCaller::Store(store)),
     });
